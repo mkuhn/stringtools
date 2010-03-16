@@ -1,0 +1,10 @@
+syntax: glob
+
+._*
+.DS_Store
+*.pyc
+*~
+#*#
+*.pickle
+*log
+

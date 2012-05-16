@@ -29,34 +29,6 @@ local_prior_pp = 0.063 ## note: when Michael recalculated this prior, it went to
 local_prior_pc = 0.029      
 local_prior_cc = 0.026      
 
-
-def compute_combined_scores(scores, prior):
-    
-    ## some basic checks to learn about impossible errors the hard way:
-    assert prior > 0.01, "error: prior prior far too low !!"
-    assert prior < 0.50, "error: prior prior far too high !!"
-
-    ## next, do the 1 - multiplication:
-
-    combined_score_one_minus = 1
-    
-    for score in scores:
-        combined_score_one_minus *= 1 - compute_prior_away(score, prior)
-
-    ## and lastly, do the 1 - conversion again, and put back the prior *exactly once*
-
-    combined_score = (1.0 - combined_score_one_minus)            ## 1- conversion
-    combined_score *= (1.0 - prior)                                 ## scale down
-    combined_score += prior                                         ## and add prior.
-
-    ## out-of-bounds check once again, to make sure:
-    if combined_score < 0.0: combined_score = 0.0 
-    if combined_score > 1.0: combined_score = 1.0 
-
-    ## and return the result.
-
-    return combined_score
-
 def compute_combined_score_protein_protein (
         nscore, nscore_transferred, 
         fscore, 
@@ -87,6 +59,7 @@ def compute_combined_score_protein_protein (
         prior = local_prior_pp
 
     ## some basic checks to learn about impossible errors the hard way:
+
     assert prior > 0.01, "error: prior prior far too low !!"
     assert prior < 0.50, "error: prior prior far too high !!"
     
@@ -204,28 +177,12 @@ def compute_combined_score_orthgroup_orthgroup(nscore, fscore, pscore, ascore, e
 ############################################################################################################
 
 def compute_combined_score_protein_chemical(escore, escore_transferred, dscore, dscore_transferred, tscore, tscore_transferred, prior = None):
-    """
-    >>> args = ", ".join( ["0.6"]*6 ) 
-    >>> python_perl_check("compute_combined_score_protein_chemical(" + args + ")")
-    >>> args = ", ".join( ["0.6, 0"]*3 ) 
-    >>> python_perl_check("compute_combined_score_protein_chemical(" + args + ")")
-    >>> args = ", ".join( ["1.0"]*6 ) 
-    >>> python_perl_check("compute_combined_score_protein_chemical(" + args + ")")
-    >>> args = ", ".join( ["0.0"]*6 ) 
-    >>> python_perl_check("compute_combined_score_protein_chemical(" + args + ")")
-    >>> args = ", ".join( [str(local_prior_pp)]*6 ) 
-    >>> python_perl_check("compute_combined_score_protein_chemical(" + args + ")")
-    >>> args = ", ".join( [str(0.999*local_prior_pp)]*6 ) 
-    >>> python_perl_check("compute_combined_score_protein_chemical(" + args + ")")
-    >>> args = ", ".join( [str(1.001*local_prior_pp)]*6 ) 
-    >>> python_perl_check("compute_combined_score_protein_chemical(" + args + ")")
-    """
-    
+
     if prior is None:
         prior = local_prior_pc
 
     # set 0 score for channels that do not exist for protein-chemical relations
-    return compute_combined_scores( (escore, escore_transferred, dscore, dscore_transferred, tscore, tscore_transferred), prior)
+    return compute_combined_score_protein_protein(0, 0, 0, 0, 0, 0, 0, escore, escore_transferred, dscore, dscore_transferred, tscore, tscore_transferred, prior)
 
 
 ############################################################################################################
@@ -234,26 +191,12 @@ def compute_combined_score_protein_chemical(escore, escore_transferred, dscore, 
 ############################################################################################################
 
 def compute_combined_score_chemical_chemical(escore, dscore, tscore, prior = None):
-    """
-    >>> args = ", ".join( ["0.6"]*3 ) 
-    >>> python_perl_check("compute_combined_score_chemical_chemical(" + args + ")")
-    >>> args = ", ".join( ["1.0"]*3 ) 
-    >>> python_perl_check("compute_combined_score_chemical_chemical(" + args + ")")
-    >>> args = ", ".join( ["0.0"]*3 ) 
-    >>> python_perl_check("compute_combined_score_chemical_chemical(" + args + ")")
-    >>> args = ", ".join( [str(local_prior_pp)]*3 ) 
-    >>> python_perl_check("compute_combined_score_chemical_chemical(" + args + ")")
-    >>> args = ", ".join( [str(0.999*local_prior_pp)]*3 ) 
-    >>> python_perl_check("compute_combined_score_chemical_chemical(" + args + ")")
-    >>> args = ", ".join( [str(1.001*local_prior_pp)]*3 ) 
-    >>> python_perl_check("compute_combined_score_chemical_chemical(" + args + ")")
-    """
+
     if prior is None:
         prior = local_prior_cc
 
     # set 0 score for channels that do not exist for protein-chemical relations
-    # return compute_combined_score_protein_protein(0, 0, 0, 0, 0, 0, 0, escore, 0, dscore, 0, tscore, prior)
-    return compute_combined_scores( (escore, dscore, tscore ), prior)
+    return compute_combined_score_protein_protein(0, 0, 0, 0, 0, 0, 0, escore, 0, dscore, 0, tscore, prior)
 
 
 
@@ -283,14 +226,14 @@ def combine_two_scores_generic(score1, score2, prior):
     assert prior < 0.50, "error: prior prior far too high !!"
     assert score1 >= 0 and score2 >= 0, "error: negative scores !!" 
 
-    if score1 == 0 or score2 == 0:
+    if score1 == 0 and score2 == 0:
         return 0
     
     if score1 <= prior:
-        return score1
+        return score2
         
     if score2 <= prior:
-        return score2
+        return score1
 
     ## first, remove the priors from both scores.
     score1_prior_corrected = compute_prior_away (score1, prior)
@@ -370,11 +313,10 @@ def combine_two_scores_chemical_chemical (score1, score2, prior = None):
     return combine_two_scores_generic (score1, score2, prior)
 
 
-## in case this script is directly called, check if a local Perl module give the same results
 if __name__ == '__main__':
     from xmlrpclib import ServerProxy, Error
     
-    def python_perl_check(call, server = ServerProxy("http://localhost:8042")):
+    def python_perl_check(call, server = ServerProxy("http://localhost:8047")):
     
         python = eval(call)
         perl = eval("server." + call)
